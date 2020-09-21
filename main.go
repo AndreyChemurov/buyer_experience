@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
+	"buyer_experience/internal/http"
 )
 
 func main() {
-	fmt.Println("hello world!")
+	http.PathHandler()
 }

@@ -1,0 +1,23 @@
+version: '3'
+
+services: 
+    db:
+        image: postgres
+        container_name: avito_bx_db
+        ports: 
+            - 5432:5432
+    web:
+        container_name: avito_bx_web
+        build: 
+            context: .
+            dockerfile: ./Dockerfile
+        volumes:
+            - .:/code
+        command: bash -c "while !</dev/tcp/db/5432; do sleep 1; done; go run main.go"
+        ports: 
+            - 8000:8000
+        depends_on: 
+            - db
+        links: 
+            - db
+        
