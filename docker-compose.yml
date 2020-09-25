@@ -2,11 +2,20 @@ version: '3'
 
 services: 
     db:
+        restart: unless-stopped
         image: postgres
+        hostname: postgres
         container_name: avito_bx_db
         ports: 
-            - 5432:5432
+            - 5432
+        environment: 
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: postgres
+            POSTGRES_HOST: db
+            DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
     web:
+        restart: unless-stopped
         container_name: avito_bx_web
         build: 
             context: .

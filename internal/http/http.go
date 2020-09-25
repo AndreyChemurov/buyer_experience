@@ -1,38 +1,32 @@
 package http
 
 import (
+	"buyer_experience/internal/database"
 	"buyer_experience/internal/errors"
 	"buyer_experience/internal/parser"
 	"buyer_experience/internal/types"
 	"encoding/json"
-	"log"
 	"net"
 	"net/http"
 	"regexp"
 	"strings"
 )
 
-// PathHandler - функция обарботчик путей
-func PathHandler() {
-	http.HandleFunc("/subscribe", subscribe)
-
-	http.HandleFunc("/", notFound)
-	log.Fatal(http.ListenAndServe(":8000", nil))
-}
-
-func checkTransportInfo(r *http.Request) (status int, message string) {
+func checkTransportInfo(r *http.Request) (status int, message string, response *types.SubscriberResponse) {
 	// Проверить метод
 	if r.Method != "POST" {
-		return 405, "Method not allowed: use POST."
+		return http.StatusMethodNotAllowed, "Method not allowed: use POST", response
 	}
 
 	// Проверить валидность json'а
 	decoder := json.NewDecoder(r.Body)
 
 	var s types.Subscriber
+	var shortLink string = ""
+	var err error
 
-	if err := decoder.Decode(&s); err != nil {
-		return 500, "Invalid JSON format."
+	if err = decoder.Decode(&s); err != nil {
+		return http.StatusInternalServerError, "Invalid JSON format.", response
 	}
 
 	email := s.Mail
@@ -40,21 +34,27 @@ func checkTransportInfo(r *http.Request) (status int, message string) {
 
 	// Проверить корректность введенных параметров
 	if email == "" || link == "" {
-		return 500, "Wrong parameters."
+		return http.StatusInternalServerError, "Wrong parameter(s)", response
+	}
+
+	if shortLink, err = parser.LinkSimplifier(link); err != nil {
+		return http.StatusInternalServerError, err.Error(), response
 	}
 
 	if !isEmailValid(email) {
-		return 500, "Invalid email."
+		return http.StatusInternalServerError, "Invalid email", response
 	}
 
-	if !isLinkValid(link) {
-		return 500, "Invalid link."
+	if !isLinkValid(shortLink) {
+		return http.StatusInternalServerError, "Invalid link", response
 	}
 
-	types.Mail = email
-	types.Link = link
+	response = &types.SubscriberResponse{
+		Mail: email,
+		Link: shortLink,
+	}
 
-	return 200, ""
+	return http.StatusOK, "", response
 }
 
 func isEmailValid(e string) bool {
@@ -82,7 +82,7 @@ func isEmailValid(e string) bool {
 func isLinkValid(l string) bool {
 	client := &http.Client{}
 
-	_, err := client.Get(l) // https://www.avito.ru тоже работает
+	_, err := client.Get(l)
 
 	if err != nil {
 		return false
@@ -91,10 +91,23 @@ func isLinkValid(l string) bool {
 	return true
 }
 
-func subscribe(w http.ResponseWriter, r *http.Request) {
+// Subscribe ...
+func Subscribe(w http.ResponseWriter, r *http.Request) {
+	var (
+		price int
+		id    int
+		err   error
+
+		userInfo *types.SubscriberResponse
+
+		responseJSON []byte
+		status       int
+		message      string
+	)
+
 	// Проверить валидность данных
-	if status, message := checkTransportInfo(r); status != 200 {
-		responseJSON := errors.ErrorType(status, message)
+	if status, message, userInfo = checkTransportInfo(r); status != http.StatusOK {
+		responseJSON = errors.ErrorType(status, message)
 
 		w.WriteHeader(status)
 		w.Write(responseJSON)
@@ -103,30 +116,67 @@ func subscribe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Верифицировать мейл
-	// if message, err := email.Verification(types.Mail); err != nil {
-	// 	responseJSON := errors.ErrorType(500, message)
+	// if message, err := email.Verify(userInfo.Mail); err != nil {
+	// 	responseJSON := errors.ErrorType(http.StatusInternalServerError, message)
 
-	// 	w.WriteHeader(500)
+	// 	w.WriteHeader(http.StatusInternalServerError)
 	// 	w.Write(responseJSON)
 
 	// 	return
 	// }
 
-	// Распарсить страницу
-	if err := parser.ParsePage(types.Link); err != nil {
-		responseJSON := errors.ErrorType(500, err.Error())
+	// Создать пользователя
+	if id, err = database.CreateUser(userInfo); err != nil {
+		responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
 
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write(responseJSON)
 
 		return
 	}
 
-	// Оформить подписку (бд)
+	// Если есть хотя бы одна подписка на объявление
+	if price, err = database.CheckSubscriptionExists(userInfo.Link); err != nil {
+		responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
+
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(responseJSON)
+
+		return
+
+	} else if price == -1 { // Если подписки нет
+
+		// Распарсить страницу и получить цену за объявление
+		if price, err = parser.ParsePage(userInfo.Link); err != nil {
+			responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
+
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write(responseJSON)
+
+			return
+		}
+
+	}
+
+	// Создать новую подписку с первым пользователем
+	if err = database.CreateNewSubscription(userInfo.Link, id, price); err != nil {
+		responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
+
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(responseJSON)
+
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(types.ResponseOK)
+
+	return
 }
 
-func notFound(w http.ResponseWriter, r *http.Request) {
-	responseJSON := errors.ErrorType(404, "Not found.")
+// NotFound ...
+func NotFound(w http.ResponseWriter, r *http.Request) {
+	responseJSON := errors.ErrorType(http.StatusNotFound, "Not found")
 
 	w.WriteHeader(http.StatusNotFound)
 	w.Write(responseJSON)
