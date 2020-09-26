@@ -1,6 +1,6 @@
 package types
 
-// CreateTables ...
+// CreateTables - sql создания новой таблицы и индексов
 const CreateTables string = `
 	CREATE TABLE IF NOT EXISTS "subscribers" (
 		"id" BIGSERIAL NOT NULL PRIMARY KEY,

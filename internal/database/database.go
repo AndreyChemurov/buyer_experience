@@ -35,8 +35,8 @@ func openDB() (db *sql.DB, err error) {
 	return db, nil
 }
 
-// CreateTables создает таблицы БД, "subscribers" и "users",
-// если они еще не были созданы.
+// CreateTables создает таблицу БД, "subscribers",
+// если она еще не была создана.
 func CreateTables() (err error) {
 	if db, err = openDB(); err != nil {
 		return err
@@ -53,42 +53,8 @@ func CreateTables() (err error) {
 	return nil
 }
 
-// CreateUser проверяет, был ли пользователь с данным email'ом подписан на какое-то объявление (создан)
-// Если нет, то создается новый пользователь.
-func CreateUser(user *types.SubscriberResponse, price int) (id int, err error) {
-	if db, err = openDB(); err != nil {
-		return -1, err
-	}
-
-	defer db.Close()
-
-	var (
-		// SQLStmt string   = `SELECT EXISTS(SELECT 1 FROM "users" WHERE email=$1);`
-		SQLStmt string   = `SELECT EXISTS(SELECT * FROM "subscribers" WHERE user_email=$1);`
-		row     *sql.Row = db.QueryRow(SQLStmt, user.Mail)
-		r       bool     // false, если пользователя с таким email ни на что не подписан
-	)
-
-	if err = row.Scan(&r); err != nil {
-		return -1, err
-	}
-
-	if r != false {
-		return -1, errors.New("User has subscription for this offer")
-	}
-
-	// Пользователь с таким email не имеет подписки на объявление
-
-	SQLStmt = `ISERT INTO "subscribers" VALUES (DEFAULT, $1, $2, $3) RETURNING id;`
-
-	if err = db.QueryRow(SQLStmt, user.Link, user.Mail, price).Scan(&id); err != nil {
-		return -1, err
-	}
-
-	return id, nil
-}
-
-// CheckSubscriptionExists ...
+// CheckSubscriptionExists проверяет, что подписка на объявление уже существует.
+//	Если да, то возвращается цена, чтобы не парсить ее заново
 func CheckSubscriptionExists(link string) (price int, err error) {
 	if db, err = openDB(); err != nil {
 		return -1, err
@@ -97,7 +63,7 @@ func CheckSubscriptionExists(link string) (price int, err error) {
 	defer db.Close()
 
 	var (
-		SQLStmt string   = `SELECT price FROM "subscibers" WHERE link=$1;`
+		SQLStmt string   = `SELECT price FROM "subscribers" WHERE link=$1;`
 		row     *sql.Row = db.QueryRow(SQLStmt, link)
 	)
 
@@ -108,8 +74,34 @@ func CheckSubscriptionExists(link string) (price int, err error) {
 	return price, nil
 }
 
-// CreateNewSubscription ...
-func CreateNewSubscription(link string, id int, price int) (err error) {
+// DoubleSubscription проверяет, что пользователь не пытается
+//	оформить подписку на одно и то же объявление
+func DoubleSubscription(user *types.SubscriberResponse) (err error) {
+	if db, err = openDB(); err != nil {
+		return err
+	}
+
+	defer db.Close()
+
+	var (
+		SQLStmt string   = `SELECT id FROM "subscribers" WHERE user_email=$1 AND link=$2;`
+		row     *sql.Row = db.QueryRow(SQLStmt, user.Mail, user.Link)
+		id      int      = -1
+	)
+
+	err = row.Scan(&id)
+
+	if id != -1 { // Пользователь пытается подписаться дважды на одно объявление
+		return errors.New("User already has subscription for this offer")
+	} else if err == sql.ErrNoRows { // Нет ни одного пользователя
+		return nil // -> можно подписаться
+	} else {
+		return err
+	}
+}
+
+// CreateNewSubscription создает новую подписку
+func CreateNewSubscription(user *types.SubscriberResponse, price int) (err error) {
 	if db, err = openDB(); err != nil {
 		return err
 	}
@@ -120,7 +112,7 @@ func CreateNewSubscription(link string, id int, price int) (err error) {
 		SQLStmt string = `INSERT INTO "subscribers" VALUES (DEFAULT, $1, $2, $3);`
 	)
 
-	if _, err = db.Exec(SQLStmt, link, id, price); err != nil {
+	if _, err = db.Exec(SQLStmt, user.Link, user.Mail, price); err != nil {
 		return err
 	}
 

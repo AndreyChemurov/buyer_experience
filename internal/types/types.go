@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 )
 
-// Subscriber ...
+// Subscriber - данные, которые передаются в запросе
 type Subscriber struct {
 	Mail string `json:"mail"`
 	Link string `json:"link"`
 }
 
-// SubscriberResponse ...
+// SubscriberResponse - данные, которые используются из запроса
 type SubscriberResponse struct {
 	Mail string
 	Link string
@@ -21,5 +21,5 @@ var responseOK map[string]string = map[string]string{
 	"status_message": "OK",
 }
 
-// ResponseOK ...
+// ResponseOK - json 200'го статуса
 var ResponseOK, _ = json.Marshal(responseOK)

@@ -18,14 +18,14 @@ func checkTransportInfo(r *http.Request) (status int, message string, response *
 		return http.StatusMethodNotAllowed, "Method not allowed: use POST", response
 	}
 
+	var (
+		s         types.Subscriber
+		shortLink string = ""
+		err       error
+	)
+
 	// Проверить валидность json'а
-	decoder := json.NewDecoder(r.Body)
-
-	var s types.Subscriber
-	var shortLink string = ""
-	var err error
-
-	if err = decoder.Decode(&s); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&s); err != nil {
 		return http.StatusInternalServerError, "Invalid JSON format.", response
 	}
 
@@ -57,6 +57,7 @@ func checkTransportInfo(r *http.Request) (status int, message string, response *
 	return http.StatusOK, "", response
 }
 
+// Проверить мейл по регулярке
 func isEmailValid(e string) bool {
 	var emailRegex = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
@@ -79,6 +80,7 @@ func isEmailValid(e string) bool {
 	return true
 }
 
+// Проверить, что до объявления можно "достучаться"
 func isLinkValid(l string) bool {
 	client := &http.Client{}
 
@@ -91,11 +93,10 @@ func isLinkValid(l string) bool {
 	return true
 }
 
-// Subscribe ...
+// Subscribe оформляет подписку на объявление
 func Subscribe(w http.ResponseWriter, r *http.Request) {
 	var (
 		price int
-		id    int
 		err   error
 
 		userInfo *types.SubscriberResponse
@@ -115,36 +116,10 @@ func Subscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Верифицировать мейл
-	// if message, err := email.Verify(userInfo.Mail); err != nil {
-	// 	responseJSON := errors.ErrorType(http.StatusInternalServerError, message)
+	// Проверить есть ли хотя бы одна подписка на объявление
+	price, err = database.CheckSubscriptionExists(userInfo.Link)
 
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	w.Write(responseJSON)
-
-	// 	return
-	// }
-
-	// Создать пользователя
-	if id, err = database.CreateUser(userInfo); err != nil {
-		responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
-
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write(responseJSON)
-
-		return
-	}
-
-	// Если есть хотя бы одна подписка на объявление
-	if price, err = database.CheckSubscriptionExists(userInfo.Link); err != nil {
-		responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
-
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write(responseJSON)
-
-		return
-
-	} else if price == -1 { // Если подписки нет
+	if price == -1 { // Если подписки нет
 
 		// Распарсить страницу и получить цену за объявление
 		if price, err = parser.ParsePage(userInfo.Link); err != nil {
@@ -156,10 +131,29 @@ func Subscribe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+	} else if err != nil { // Другая ошибка
+		responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
+
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(responseJSON)
+
+		return
 	}
 
+	// Проверить, что пользователь не пытается оформить подписку на одно объявление дважды
+	if err = database.DoubleSubscription(userInfo); err != nil {
+		responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
+
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(responseJSON)
+
+		return
+	}
+
+	// Верифицировать мейл здесь
+
 	// Создать новую подписку с первым пользователем
-	if err = database.CreateNewSubscription(userInfo.Link, id, price); err != nil {
+	if err = database.CreateNewSubscription(userInfo, price); err != nil {
 		responseJSON = errors.ErrorType(http.StatusInternalServerError, err.Error())
 
 		w.WriteHeader(http.StatusInternalServerError)
@@ -174,7 +168,7 @@ func Subscribe(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// NotFound ...
+// NotFound вызывается, если путь не существует
 func NotFound(w http.ResponseWriter, r *http.Request) {
 	responseJSON := errors.ErrorType(http.StatusNotFound, "Not found")
 
