@@ -2,6 +2,7 @@ package email
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	mailjet "github.com/mailjet/mailjet-apiv3-go"
@@ -36,6 +37,6 @@ func Send(email string, link string) {
 	messages := mailjet.MessagesV31{Info: messagesInfo}
 
 	if _, err := mailjetClient.SendMailV31(&messages); err != nil {
-		//
+		log.Println(err)
 	}
 }
