@@ -138,9 +138,7 @@ func CheckPriceChanged() {
 
 	for {
 		if db, err = openDB(); err != nil {
-			log.Println(err)
-			log.Fatal("database.go, 143")
-			os.Exit(1)
+			//
 		}
 
 		defer db.Close()
