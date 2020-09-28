@@ -11,4 +11,5 @@ const CreateTables string = `
 
 	CREATE INDEX IF NOT EXISTS subs_email_idx ON subscribers (user_email);
 	CREATE INDEX IF NOT EXISTS subs_link_idx ON subscribers (link);
+	CREATE INDEX IF NOT EXISTS subs_price_idx ON subscribers (price);
 `

@@ -17,6 +17,9 @@ services:
     web:
         restart: unless-stopped
         container_name: avito_bx_web
+        environment: 
+            - BX_PUBLIC_API_KEY=e85698cba3cfb226a16bfd4d1874a97b
+            - BX_PRIVATE_API_KEY=e9e2000bcdfa3d36f1506c2e13e48ae8
         build: 
             context: .
             dockerfile: ./Dockerfile

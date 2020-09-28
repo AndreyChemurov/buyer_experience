@@ -12,6 +12,8 @@ func main() {
 		panic(err)
 	}
 
+	go database.CheckPriceChanged()
+
 	http.HandleFunc("/subscribe", internalhttp.Subscribe)
 	http.HandleFunc("/", internalhttp.NotFound)
 

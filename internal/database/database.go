@@ -1,10 +1,14 @@
 package database
 
 import (
+	"buyer_experience/internal/net"
 	"buyer_experience/internal/types"
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"time"
 
 	_ "github.com/lib/pq" //
 )
@@ -35,7 +39,7 @@ func openDB() (db *sql.DB, err error) {
 	return db, nil
 }
 
-// CreateTables создает таблицу БД, "subscribers",
+// CreateTables создает таблицу БД "subscribers",
 // если она еще не была создана.
 func CreateTables() (err error) {
 	if db, err = openDB(); err != nil {
@@ -117,4 +121,55 @@ func CreateNewSubscription(user *types.SubscriberResponse, price int) (err error
 	}
 
 	return nil
+}
+
+// CheckPriceChanged селектит инфу из бд для дальнейшего сравнения с объявлением на Авито
+func CheckPriceChanged() {
+	var (
+		SQLStmt string = `SELECT DISTINCT link, user_email, price FROM "subscribers";`
+		links   []string
+		prices  []int
+		emails  []string
+
+		link  string
+		price int
+		email string
+	)
+
+	for {
+		if db, err = openDB(); err != nil {
+			log.Println(err)
+			log.Fatal("database.go, 143")
+			os.Exit(1)
+		}
+
+		defer db.Close()
+
+		rows, err := db.Query(SQLStmt)
+
+		if err != nil {
+			//
+		}
+
+		defer rows.Close()
+
+		for rows.Next() {
+			err = rows.Scan(&link, &email, &price)
+
+			if err != nil {
+				//
+
+				continue
+			}
+			links = append(links, link)
+			emails = append(emails, email)
+			prices = append(prices, price)
+		}
+
+		go net.RequestPrices(links, emails, prices)
+
+		time.Sleep(time.Minute * 2)
+
+		links = nil
+	}
 }

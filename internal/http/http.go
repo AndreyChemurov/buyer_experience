@@ -37,6 +37,7 @@ func checkTransportInfo(r *http.Request) (status int, message string, response *
 		return http.StatusInternalServerError, "Wrong parameter(s)", response
 	}
 
+	// Сократить ссылку до "https://www.avito.ru/{id-объявления}"
 	if shortLink, err = parser.LinkSimplifier(link); err != nil {
 		return http.StatusInternalServerError, err.Error(), response
 	}
@@ -94,6 +95,11 @@ func isLinkValid(l string) bool {
 }
 
 // Subscribe оформляет подписку на объявление
+// Аргументы:
+//	mail: email, на который присылать уведомления
+//	link: ссылка на объявление Авито
+// Возвращаемые значения:
+//	статус OK 200, если все в порядке
 func Subscribe(w http.ResponseWriter, r *http.Request) {
 	var (
 		price int
@@ -149,8 +155,6 @@ func Subscribe(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-
-	// Верифицировать мейл здесь
 
 	// Создать новую подписку с первым пользователем
 	if err = database.CreateNewSubscription(userInfo, price); err != nil {
