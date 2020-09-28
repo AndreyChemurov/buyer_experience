@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	_ "github.com/lib/pq" //
@@ -138,7 +137,7 @@ func CheckPriceChanged() {
 
 	for {
 		if db, err = openDB(); err != nil {
-			//
+			log.Println(err)
 		}
 
 		defer db.Close()
@@ -146,7 +145,7 @@ func CheckPriceChanged() {
 		rows, err := db.Query(SQLStmt)
 
 		if err != nil {
-			//
+			log.Println(err)
 		}
 
 		defer rows.Close()
@@ -155,7 +154,7 @@ func CheckPriceChanged() {
 			err = rows.Scan(&link, &email, &price)
 
 			if err != nil {
-				//
+				log.Println(err)
 
 				continue
 			}
