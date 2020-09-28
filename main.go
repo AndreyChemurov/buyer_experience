@@ -1,9 +1,21 @@
 package main
 
 import (
-	"fmt"
+	"buyer_experience/internal/database"
+	internalhttp "buyer_experience/internal/http"
+	"log"
+	"net/http"
 )
 
 func main() {
-	fmt.Println("hello world!")
+	if err := database.CreateTables(); err != nil {
+		panic(err)
+	}
+
+	go database.CheckPriceChanged()
+
+	http.HandleFunc("/subscribe", internalhttp.Subscribe)
+	http.HandleFunc("/", internalhttp.NotFound)
+
+	log.Fatal(http.ListenAndServe(":8000", nil))
 }
